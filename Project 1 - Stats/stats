@@ -1,0 +1,196 @@
+#!/bin/bash
+#Author: Tyler Cope
+#Description: This program reads numbers from stdin or a file and returns the median and
+#average of the rows or columns.
+#Date: 4/20/2017
+
+average=avg1$$              #These will allow storage to temp files. Suggested usage by Professor Brewster
+median=med1$$
+results=results$$
+holder=temp$$
+
+trap 'rm -f $median $average $results $holder; exit 1' INT HUP TERM   #In case the script doesn't run properly, this cleans up temp files
+
+
+calcCols()
+{
+    i=0     #Variables to track and cut columns properly
+    col=1
+    
+    trackCols=$( head -n 1 "$fileName" | wc -w )         #cut the columns so we can calculate each individually
+
+    while [ $i -lt "$trackCols" ]         #Since we set i to 0, it will run until i equals the number of columns
+    do
+        avg=0                           #Variables to hold arithmetic
+        count=0
+        sum=0
+
+      
+        sorted=$( cut -f "$col" "$fileName" | tr " " "\n" | sort -g )   #Sort to make it easy to find the median
+
+        for j in $sorted          #For each line add the value to sum and increase the count to help with median and average calculation
+        do
+            sum=$((sum + j))
+            ((count++))
+        done
+
+        if [ $count -eq 0 ]
+        then
+            avg=""
+        else
+            avg=$(( (sum + (count / 2)) / count ))     #Formula for proper rounding
+        fi
+
+
+        middle=$(( (count / 2) + 1 ))       #Get the middle value
+        k=1  
+
+        for m in $sorted
+        do
+            number=$m
+            if [ $k -le $middle ]           #This will run until the middle value is hit by k
+            then
+                med=$number                 #Properly assigns the median value
+                ((k++))               #Increments the counter
+            fi
+        done
+
+
+        echo "$avg" >> $average               #Send results to temp files
+        echo "$med" >> $median
+
+
+        ((col++))                 #Increment variables
+        ((i++))
+    done
+    
+    
+    echo -e "Averages: " > $results             #Set-up display text
+    if [ -e $average ]
+    then
+        tr "\n" "\t" < $average >> $results     #Send temp file to results file
+    fi
+    echo -e "\n" >> $results
+
+    echo -e "Medians: " >> $results             #Same for median
+    if [ -e $median ]
+    then
+        tr "\n" "\t" < $median >> $results
+    fi
+    echo -e "\n" >> $results
+  
+
+    rm -f $median $average              #Clean up temp files
+
+
+    cat $results            #Display temporary file with results
+    rm -f $results          #Clean up temp file used to hold results
+}
+
+
+calcRows()
+{
+    echo -e "Average\tMedian"   
+
+    while read eachLine       #Read in each line
+    do
+        
+        avg=0                #Variables again for math calculation
+        count=0 
+        sum=0
+    
+
+        sorted=$( echo $eachLine | tr " " "\n" | sort -g )    #Sort rows to make it easy to find the median
+
+
+        for i in $sorted                #For each row, get the count and add to the sum
+        do
+            firstNum=$i
+            ((count++))
+            sum=$((sum + firstNum))
+        done
+
+        middle=$(( (count / 2) + 1 ))    #Find the middle
+        j=1  
+
+        for k in $sorted
+        do
+            secondNum=$k
+            if [ $j -le $middle ]   #Run until we hit the middle value. It will properly assign the median
+            then
+                med=$secondNum
+                ((j++))
+            fi
+        done
+
+
+        if [ $count -eq 0 ]
+        then
+            avg=""
+        else
+            avg=$(( (sum + (count / 2)) / count ))     #Formula for proper rounding
+        fi
+
+
+        echo -e "$avg\t$med"        #Display the results
+
+    done < "$fileName"
+
+}
+
+
+fileEmpty()
+{
+  while read line
+  do
+    echo -e "$line" >> $holder   #If there is no file, send each line into the temp holder and set that file name to the fileName variable
+  done < /dev/stdin              #Read from stdin
+
+  fileName=$holder
+}
+ 	
+errorMessage1=$( echo "./stats {-rows|cols} [file]" )  #Error messages for the user
+errorMessage2=$( echo "Error. Cannot read file." )
+
+
+
+if [ "$#" -gt 2 ] || [ "$#" -lt 1 ];		#If the user enters more than 2 arguments or less than 1, display error message and exit program
+then
+     echo "$errorMessage1" >&2
+     exit 1
+fi
+
+
+if [[ "$2" != "" ]];		#If second argument is not empty, check if file is readable. 
+then
+   if [ ! -r "$2" ];		#If file is not read, echo message that file can't be read
+   then
+     echo "$errorMessage2" >&2  #Error message to stderr
+     exit 1
+
+   else				#Else set fileName variable to second argument
+     fileName=$2
+   fi
+else				#If second argument is empty, call fileEmpty and run program like that
+   fileEmpty
+fi
+
+if [[ "$1" == -c* ]]; 		#If user enters something that starts with lowercase c, then calculate the columns
+then
+    calcCols
+
+elif [[ "$1" == -r* ]];		#If user enters something that starts with lowercase r, then calculate the rows
+then
+    calcRows
+
+else          
+    echo "$errorMessage1" >&2   #Else there's an error
+    exit 1
+fi
+
+
+
+rm -f $holder			#Clean up this temp file
+
+
+exit 0
